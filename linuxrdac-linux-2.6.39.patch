@@ -1,0 +1,1036 @@
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/lsvdev linuxrdac-09.03.0C06.0452.2/lsvdev
+--- linuxrdac-09.03.0C06.0452.2.orig/lsvdev	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/lsvdev	2011-11-02 13:48:36.336871856 +0100
+@@ -33,8 +33,9 @@
+ mppLnx_init_fn()
+ {
+     #get virtual target and array name mapping
+-    MPPLNX_VTID_NAME_MAP=$(/usr/sbin/mppUtil -a|awk '{ if (/^ *[0-9]/) printf("%s %s\n", $1, $4)}')
+-	if [ $(uname -r | sed 's:\([^\.]*\.[^\.]*\.[^\.\-]*\)\.*.*:\1:' | sed 's:\.::g') -ge 2627 ]
++    MPPLNX_VTID_NAME_MAP=$(/usr/local/sbin/mppUtil -a|awk '{ if (/^ *[0-9]/) printf("%s %s\n", $1, $4)}')
++	if [ $(uname -r | sed 's:\([^\.]*\.[^\.]*\.[^\.\-]*\)\.*.*:\1:' | sed 's:\.::g') -ge 2627 ] || \
++	   [ $(uname -r | sed 's:\([^\.]*\)\.[^\.]*\.[^\.\-]*\.*.*:\1:' | sed 's:\.::g') -ge 3 ]
+     then
+         IS_KERNEL_BIGGER_2_6_27="1"
+     fi	
+@@ -69,9 +70,9 @@
+ #*****************************************************************************
+ mppLnx_pre_exec_check_fn()
+ {
+-    if [ ! -x /usr/sbin/mppUtil ]
++    if [ ! -x /usr/local/sbin/mppUtil ]
+     then
+-        echo "/usr/sbin/mppUtil is not installed. $0 cannot be executed!"
++        echo "/usr/local/sbin/mppUtil is not installed. $0 cannot be executed!"
+         exit 1
+     fi
+ 
+@@ -90,7 +91,7 @@
+ mppLnx_report_map_fn()
+ {
+     echo  "${MPPLNX_VTID_NAME_MAP}${NEWLINE}${MPPLNX_MAGIC_LINE}${NEWLINE}${MPPLNX_VDEV_BLOCK_DEVS}"\
+-   |/usr/bin/awk -F"/"\
++   |awk -F"/"\
+    -v MPPLNX_MAGIC_LINE=${MPPLNX_MAGIC_LINE} -v IS_KERNEL_BIGGER_2_6_27=${IS_KERNEL_BIGGER_2_6_27}\
+    'BEGIN{
+       first_tid = -100
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/Makefile linuxrdac-09.03.0C06.0452.2/Makefile
+--- linuxrdac-09.03.0C06.0452.2.orig/Makefile	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/Makefile	2011-11-07 13:19:44.641866023 +0100
+@@ -25,64 +25,16 @@
+ #
+ #######################################################################
+ 
+-#OS_VER := $(shell uname -r)
+-HOST_TYPE := $(shell uname -m)
+-IS_SMP := $(shell (uname -v | grep -c "SMP"))
+-# Kernel Distribution (either REDHAT or SUSE)
+-DIST := $(shell (if [ -f /etc/redhat-release ]; then echo REDHAT; else echo SUSE; fi))
+-RHEL6_FLAG := $(shell (if [ -f /etc/redhat-release ]; then cat /etc/redhat-release | grep -c 'release 6'; else echo 0; fi))
+-SLES11_FLAG := $(shell ((cat /etc/SuSE-release 2> /dev/null | grep VERSION | grep "11" | wc -l) ))
+-KDUMP_FLAG := $(shell (/bin/rpm -qa | grep kexec-tools | wc -l))
+-X64_EFISUPPORT := $(shell (if [ -d /boot/efi/efi ]; then echo 1; else echo 0; fi))
+-
+-ifndef OS_VER
+-       OS_VER := `uname -r`
+-endif
+-
+-ifeq ("$(KDUMP_FLAG)", "1")
+-	ifeq ("$(DIST)", "SUSE")
+-		KDUMP_STATUS := 1
+-                ifeq ("$(SLES11_FLAG)", "1")
+-                        #KERNEL_DUMP_VER := $(shell uname -r)
+-                        KERNEL_DUMP_VER := $(OS_VER)
+-                else
+-			KERNEL_DUMP_VER := $(shell (ls -la /boot/vmlinux-kdump 2> /dev/null | sed -e 's/.*vmlinux-//g'))
+-                endif
+-			KERNEL_DUMP_OBJ := /lib/modules/$(KERNEL_DUMP_VER)/build
+-			KERNEL_DUMP_SRC_CHK_FLAG := $(shell (if [ -f $(KERNEL_DUMP_OBJ)/Makefile ]; then echo 1; else echo 0; fi))
+-	else
+-		KDUMP_STATUS := $(shell echo 1)
+-		ifeq ("$(KDUMP_STATUS)", "1")
+-			KERNEL_DUMP_VER := $(OS_VER)
+-			KERNEL_DUMP_OBJ := /lib/modules/$(KERNEL_DUMP_VER)/build
+-			KERNEL_DUMP_SRC_CHK_FLAG := $(shell (if [ -f $(KERNEL_DUMP_OBJ)/Makefile ]; then echo 1; else echo 0; fi))
+-		endif 
+-	endif
+-else
+-	KDUMP_STATUS := $(shell echo 0)
+-	KERNEL_DUMP_SRC_CHK_FLAG := $(shell echo 0)
+-endif
+-
+ ifeq ("$(KERNEL_OBJ)","")
+-	#KERNEL_OBJ := /lib/modules/$(shell uname -r)/build
+-	KERNEL_OBJ := /lib/modules/$(OS_VER)/build
++	KERNEL_OBJ := /lib/modules/$(shell uname -r)/build
+ endif
+ 
+-#Flag to check if gcc is installed
+-GCC_CHK_FLAG := $(shell (/bin/rpm -qa | grep gcc | wc -l))
+-#Flag to check if gcc is installed
+-KERNEL_SRC_CHK_FLAG := $(shell (if [ -f $(KERNEL_OBJ)/Makefile ]; then echo 1; else echo 0; fi))
+-REDHAT_KERNEL_CHECK := $(shell ((cat /etc/redhat-release | grep "release [56]" | wc -l) 2> /dev/null))
+-
+-ifeq ("$(SLES11_FLAG)", "1")
+-	SUSE_KERNEL_CHECK := $(shell echo 1)
+-else
+-	SUSE_10 := $(shell ((cat /etc/SuSE-release 2> /dev/null | grep VERSION | grep 10 | wc -l) 2> /dev/null))
+-	ifeq ("$(SUSE_10)", "1")
+-		SUSE_KERNEL_CHECK := $(shell ((cat /etc/SuSE-release 2> /dev/null | grep PATCHLEVEL | grep "[1-3]" | wc -l) 2> /dev/null))
+-	else
+-		SUSE_KERNEL_CHECK := $(shell echo 0)
+-	endif
++OS_VER := $(shell grep UTS_RELEASE $(KERNEL_OBJ)/include/generated/utsrelease.h | awk '{print $$3}')
++HOST_TYPE := $(shell grep UTS_MACHINE $(KERNEL_OBJ)/include/generated/compile.h | awk '{print $$3}')
++
++ifndef OS_VER
++	OS_VER := $(KERNEL_VERSION)
++#	OS_VER := `uname -r`
+ endif
+ 
+ COMMON_INCLUDE = ./mpp_linux_headers
+@@ -112,63 +64,15 @@
+ 	EXTRA_UTIL_FLAGS=-DPAGE_SHIFT=12
+ endif
+ 
+-#set optional parameters for uninstall
+-ifeq ($(HOST_TYPE),ia64)
+-	ifeq ($(DIST),REDHAT)
+-		EXTRA_INITRD_DIR=/boot/efi/efi/redhat
+-	else
+-		EXTRA_INITRD_DIR=/boot/efi/efi/SuSE
+-	endif
+-endif
+-ifeq ($(HOST_TYPE),x86_64)
+-	ifeq ($(X64_EFISUPPORT),1)
+-		ifeq ($(DIST),REDHAT)
+-			EXTRA_INITRD_DIR=/boot/efi/efi/redhat
+-		else
+-			EXTRA_INITRD_DIR=/boot/efi/efi/SuSE
+-		endif
+-	endif
+-endif
+-
+-ifeq ($(HOST_TYPE),ppc64)
+-
+-export KBUILD_NOPEDANTIC=1
+-
+-ifndef ($(CROSS_COMPILE))
+-CROSS_COMPILE := $(shell if [ -e /usr/local/ppc64-current3.0/bin/powerpc64-linux-gcc ]; then \
+-    echo /usr/local/ppc64-current3.0/bin/powerpc64-linux-; \
+-    else if [ -e /opt/cross/bin/powerpc64-linux-gcc ]; then \
+-    echo /opt/cross/bin/powerpc64-linux- ; fi fi)
+-endif
+-CFLAGS += -Wstrict-prototypes -Wno-trigraphs -O2 -fomit-frame-pointer \
+-          -fno-common -pipe -Wno-unused -fsigned-char -msoft-float \
+-          -Wno-uninitialized -mminimal-toc -fno-builtin -fno-strict-aliasing
+-
+-AS      =$(CROSS_COMPILE)as
+-LD      =$(CROSS_COMPILE)ld
+-CC      =$(CROSS_COMPILE)gcc
+-CPP     =$(CC) -E
+-AR      =$(CROSS_COMPILE)ar
+-NM      =$(CROSS_COMPILE)nm
+-STRIP   =$(CROSS_COMPILE)strip
+-OBJDUMP =$(CROSS_COMPILE)objdump
+-AWK     =awk
+-MAKE    =make
+-
+-LD := $(LD) -m elf64ppc
+-CC := $(CC) -m64 -DBIG_ENDIAN
+-AS := $(AS) -64
+-ELF := elf64ppc
+-CFLAGS := $(CFLAGS) 
+-endif
+-
+ final: all
+  
+-all	: gcccheck kernelvercheck.$(DIST) kernelsrccheck $(DRIVER_TARGETS) $(UTIL_TARGETS)
++all	: $(DRIVER_TARGETS) $(UTIL_TARGETS)
++	@echo KERNEL_VERSION           	: $(OS_VER)
++	@echo ARCH 	           	: $(HOST_TYPE)
+  
+-driver	: gcccheck kernelvercheck.$(DIST) kernelsrccheck $(DRIVER_TARGETS)
++driver	: $(DRIVER_TARGETS)
+  
+-install : copyfiles moduledep setupfiles setupdriver
++install : copyfiles setupfiles
+ 
+ hbacheck : 
+ 	@if [ -f /opt/mpp/makefile.saved ]; then echo "The system has old MPP driver package installed." ; echo "Please do \"make uninstall\" in the current directory before installing the new one."; exit 1; fi
+@@ -178,99 +82,58 @@
+ 	@echo "Your kernel version is $(OS_VER)" ;
+ 	@echo "Preparing to install MPP driver against this kernel version..." ;
+ 
+-gcccheck:
+-	@if [ $(GCC_CHK_FLAG) -eq 0 ]; then echo "GCC rpm is not installed"; exit 1; fi
+-
+-kernelvercheck.REDHAT:
+-	#@if [ $(REDHAT_KERNEL_CHECK) -eq 0 ]; then echo "This Version of MPP build is not supported on this Version of Redhat Kernel `uname -r`."; exit 1; fi
+-	@if [ $(REDHAT_KERNEL_CHECK) -eq 0 ]; then echo "This Version of MPP build is not supported on this Version of Redhat Kernel $(OS_VER)."; exit 1; fi
+-
+-kernelvercheck.SUSE:
+-	#@if [ $(SUSE_KERNEL_CHECK) -eq 0 ]; then echo "This Version of MPP build is not supported on this Version of SuSE Kernel `uname -r`."; exit 1; fi
+-	@if [ $(SUSE_KERNEL_CHECK) -eq 0 ]; then echo "This Version of MPP build is not supported on this Version of SuSE Kernel $(OS_VER)."; exit 1; fi
+-
+-kernelsrccheck:
+-	@if [ $(KERNEL_SRC_CHK_FLAG) -eq 0 ]; then echo "Kernel source is not installed"; exit 1; fi
+-
+ copyfiles :
+-	@install -o root -g root -m 0500 -D $(OS_VER)/genuniqueid $(DEST_DIR)/opt/mpp/genuniqueid
+-	@install -o root -g root -m 0500 -D mppSupport $(DEST_DIR)/opt/mpp/mppSupport
+-	@install -o root -g root -m 0500 -D lsvdev $(DEST_DIR)/opt/mpp/lsvdev
+-	@install -o root -g root -m 0500 -D mppiscsi_umountall $(DEST_DIR)/opt/mpp/mppiscsi_umountall
+-	@install -o root -g root -m 0500 -D utility/mppBusRescan26p $(DEST_DIR)/usr/sbin/mppBusRescan
+-	@install -o root -g root -m 0644 -D utility/mppBusRescan.1 $(DEST_DIR)/usr/share/man/man1/mppBusRescan.1
+-	@install -o root -g root -m 0644 -D utility/RDAC.9 $(DEST_DIR)/usr/share/man/man9/RDAC.9
+-	@install -o root -g root -m 0500 -D utility/mppMkInitrd $(DEST_DIR)/opt/mpp/mppMkInitrdHelper
+-	@install -o root -g root -m 0500 -D utility/mppUpdate26p $(DEST_DIR)/usr/sbin/mppUpdate
+-	@install -o root -g root -m 0644 -D utility/mppUpdate.1 $(DEST_DIR)/usr/share/man/man1/mppUpdate.1
+-	@install -o root -g root -m 0500 -D $(OS_VER)/mppUtil $(DEST_DIR)/usr/sbin/mppUtil
+-	@install -o root -g root -m 0644 -D utility/mppUtil.1 $(DEST_DIR)/usr/share/man/man1/mppUtil.1
++	@install -m 0500 -D genuniqueid $(DEST_DIR)/opt/mpp/genuniqueid
++	@install -m 0500 -D mppSupport $(DEST_DIR)/opt/mpp/mppSupport
++	@install -m 0500 -D lsvdev $(DEST_DIR)/opt/mpp/lsvdev
++	@install -m 0500 -D mppiscsi_umountall $(DEST_DIR)/opt/mpp/mppiscsi_umountall
++	@install -m 0500 -D utility/mppBusRescan26p $(DEST_DIR)/usr/local/sbin/mppBusRescan
++	@install -m 0644 -D utility/mppBusRescan.1 $(DEST_DIR)/usr/local/share/man/man1/mppBusRescan.1
++	@install -m 0644 -D utility/RDAC.9 $(DEST_DIR)/usr/local/share/man/man9/RDAC.9
++	@install -m 0500 -D utility/mppMkInitrd $(DEST_DIR)/opt/mpp/mppMkInitrdHelper
++	@install -m 0500 -D utility/mppUpdate26p $(DEST_DIR)/usr/local/sbin/mppUpdate
++	@install -m 0644 -D utility/mppUpdate.1 $(DEST_DIR)/usr/local/share/man/man1/mppUpdate.1
++	@install -m 0500 -D mppUtil $(DEST_DIR)/usr/local/sbin/mppUtil
++	@install -m 0644 -D utility/mppUtil.1 $(DEST_DIR)/usr/local/share/man/man1/mppUtil.1
+ 
+ copyrpmfiles :
+-	@install -o root -g root -m 0444 -D mpp.conf $(DEST_DIR)/etc/mpp.conf
+-	@install -o root -g root -m 0500 -D hbaCheck $(DEST_DIR)/$(RDAC_RPM_HELPER_DIR)/hbaCheck
+-	@install -o root -g root -m 0500 -D setupDriver.$(DIST) $(DEST_DIR)/$(RDAC_RPM_HELPER_DIR)/setupDriver.$(DIST)
+-	@install -o root -g root -m 0755 -D mpp_rcscript.$(DIST) $(DEST_DIR)/$(RDAC_RPM_HELPER_DIR)/mpp
++	@install -m 0444 -D mpp.conf $(DEST_DIR)/etc/mpp.conf
++	@install -m 0500 -D hbaCheck $(DEST_DIR)/$(RDAC_RPM_HELPER_DIR)/hbaCheck
++	@install -d $(DEST_DIR)/$(RDAC_RPM_HELPER_DIR)/mpp
++	@install -m 0500 -D setupDriver.* $(DEST_DIR)/$(RDAC_RPM_HELPER_DIR)
++	@install -m 0755 -D mpp_rcscript.* $(DEST_DIR)/$(RDAC_RPM_HELPER_DIR)/mpp
+ 	@/bin/sed -e ' s/"MPPLNX_REPLACE_THIS_WITH_BUILD_VERSION"/'$(KERNEL_VERSION)\/ -e ' s/MPPLNX_REPLACE_THIS_WITH_BUILD_ARCH/'$(HOST_TYPE)\/ utility/setupSuseBoot > setupSuseBoot
+-	@if [ -f /etc/SuSE-release ]; then install -o root -g root -m 0500 -D setupSuseBoot $(DEST_DIR)/$(RDAC_RPM_HELPER_DIR)/setupSuseBoot; fi
++	@if [ -f /etc/SuSE-release ]; then install -m 0500 -D setupSuseBoot $(DEST_DIR)/$(RDAC_RPM_HELPER_DIR)/setupSuseBoot; fi
+ 	@rm -rf setupSuseBoot
+ 
+ moduledep :
+ 	@echo "Generating module dependencies..."
+ 	@/sbin/depmod $(OS_VER)
+-	@if [ $(SLES11_FLAG) -ne 1 ]; then \
+-	if [ "$(DIST)" == "SUSE" -a $(KDUMP_STATUS) -eq 1 -a $(KERNEL_DUMP_SRC_CHK_FLAG) -eq 1 ]; then \
+-		/sbin/depmod $(KERNEL_DUMP_VER); \
+-	fi; \
+-	fi
+ 	
+ setupfiles :
+-	@install -o root -g root -m 0500 -D Makefile $(DEST_DIR)/opt/mpp/makefile.saved
+-	@install -o root -g root -m 0500 -D hbaCheck $(DEST_DIR)/opt/mpp/hbaCheck
+-	@install -o root -g root -m 0500 -D setupDriver.$(DIST) $(DEST_DIR)/opt/mpp/setupDriver.$(DIST)
+-	@install -o root -g root -m 0755 -D mpp_rcscript.$(DIST) $(DEST_DIR)/etc/init.d/mpp
+-	@gzip /usr/share/man/man9/RDAC.9
+-	@gzip /usr/share/man/man1/mppBusRescan.1
+-	@ln -s /usr/sbin/mppBusRescan /usr/sbin/hot_add
+-	@ln -s /usr/share/man/man1/mppBusRescan.1.gz /usr/share/man/man1/hot_add.1.gz
+-	@gzip /usr/share/man/man1/mppUpdate.1
+-	@gzip /usr/share/man/man1/mppUtil.1
++	@install -m 0500 -D Makefile $(DEST_DIR)/opt/mpp/makefile.saved
++	@install -m 0500 -D hbaCheck $(DEST_DIR)/opt/mpp/hbaCheck
++	@install -d $(DEST_DIR)/opt/mpp/
++	@install -d $(DEST_DIR)/etc/init.d/mpp/
++	@install -m 0500 -D setupDriver.* $(DEST_DIR)/opt/mpp/
++	@install -m 0755 -D mpp_rcscript.* $(DEST_DIR)/etc/init.d/mpp/
++	@gzip $(DEST_DIR)/usr/local/share/man/man9/RDAC.9
++	@gzip $(DEST_DIR)/usr/local/share/man/man1/mppBusRescan.1
++	@ln -s mppBusRescan $(DEST_DIR)/usr/local/sbin/hot_add
++	@echo .so mppBusRescan.1 > $(DEST_DIR)/usr/local/share/man/man1/hot_add.1
++	@gzip $(DEST_DIR)/usr/local/share/man/man1/mppUpdate.1
++	@gzip $(DEST_DIR)/usr/local/share/man/man1/mppUtil.1
+ 	@if [ -f /etc/mpp.conf ]; then cp /etc/mpp.conf /etc/mpp.conf.mppsave; fi
+-	@install -o root -g root -m 0444 -D mpp.conf $(DEST_DIR)/etc/mpp.conf
++	@install  -m 0444 -D mpp.conf $(DEST_DIR)/etc/mpp.conf
+ 	@if [ ! -f /var/mpp/devicemapping ]; then touch devicemapping;\
+-	install -o root -g root -m 0755 -d $(DEST_DIR)/var/mpp; install -o root -g root -m 0644 -D devicemapping $(DEST_DIR)/var/mpp/devicemapping;\
++	install  -m 0755 -d $(DEST_DIR)/var/mpp; install -m 0644 -D devicemapping $(DEST_DIR)/var/mpp/devicemapping;\
+ 	rm devicemapping; fi
+-	@if [ $(SLES11_FLAG) -eq 1 ]; then \
+-		install -o root -g root -m 0755 -D setupMpp26p.sh $(DEST_DIR)/lib/mkinitrd/scripts/setup-mpp.sh; \
+-	fi;
+-	@if [ $(RHEL6_FLAG) -eq 1 ]; then \
+-		install -o root -g root -m 0644 -D dracutsetup/mpp_pre_udev.sh /usr/share/dracut/modules.d/90mpp/mpp-pre-udev.sh; \
+-		install -o root -g root -m 0755 -D dracutsetup/install /usr/share/dracut/modules.d/90mpp/install; \
+-		install -o root -g root -m 0755 -D dracutsetup/installkernel /usr/share/dracut/modules.d/90mpp/installkernel; \
+-	fi;
++	@install -m 0644 -D dracutsetup/mpp_pre_udev.sh $(DEST_DIR)/usr/local/share/dracut/modules.d/90mpp/mpp-pre-udev.sh
++	@install -m 0755 -D dracutsetup/install $(DEST_DIR)/usr/local/share/dracut/modules.d/90mpp/install
++	@install -m 0755 -D dracutsetup/installkernel $(DEST_DIR)/usr/local/share/dracut/modules.d/90mpp/installkernel
+ 
+ setupdriver:
+ 	@/opt/mpp/setupDriver.$(DIST) $(OS_VER)
+-	@if [ "$(DIST)" == "REDHAT" -a $(KDUMP_STATUS) -eq 1 -a $(KERNEL_DUMP_SRC_CHK_FLAG) -eq 1 ]; then \
+-	if [ -n "$(EXTRA_INITRD_DIR)" ]; then \
+-		mv -f $(EXTRA_INITRD_DIR)/initrd-$(OS_VER)kdump.img $(EXTRA_INITRD_DIR)/initrd-kdump.orig 2> /dev/null ; \
+-		cp -f $(EXTRA_INITRD_DIR)/mpp-$(OS_VER).img $(EXTRA_INITRD_DIR)/initrd-$(OS_VER)kdump.img; \
+-	else \
+-		mv -f /boot/initrd-$(OS_VER)kdump.img /boot/initrd-kdump.orig 2> /dev/null; \
+-		cp -f /boot/mpp-$(OS_VER).img /boot/initrd-$(OS_VER)kdump.img; \
+-	fi; \
+-	fi
+-
+-	@if [ "$(DIST)" == "SUSE" -a $(KDUMP_STATUS) -eq 1 -a $(KERNEL_DUMP_SRC_CHK_FLAG) -eq 1 ]; then \
+-	if [ $(SLES11_FLAG) -ne 1 ]; then \
+-		/opt/mpp/setupDriver.$(DIST) $(KERNEL_DUMP_VER); \
+-              	mv -f /boot/initrd-$(KERNEL_DUMP_VER) /boot/initrd-kdump.orig 2> /dev/null; \
+-		cp -f /boot/mpp-$(KERNEL_DUMP_VER).img /boot/initrd-$(KERNEL_DUMP_VER); \
+-	else \
+-              	mv -f /boot/initrd-$(KERNEL_DUMP_VER)-kdump /boot/initrd-kdump.orig 2> /dev/null; \
+-		cp -f /boot/mpp-$(KERNEL_DUMP_VER).img /boot/initrd-$(KERNEL_DUMP_VER)-kdump; \
+-	fi; \
+-	fi
+ 	@if [ -f /etc/SuSE-release ]; then \
+ 		/sbin/insserv  /etc/init.d/mpp; \
+ 	else \
+@@ -322,15 +185,9 @@
+ 	@rm -r /etc/init.d/mpp
+ 	@rm -f /lib/modules/$(OS_VER)/kernel/drivers/scsi/mppVhba.ko
+ 	@rm -f /lib/modules/$(OS_VER)/kernel/drivers/scsi/mppUpper.ko
+-	@if [ $(SLES11_FLAG) -ne 1 ]; then \
+-	if [ "$(DIST)" == "SUSE" -a $(KDUMP_STATUS) -eq 1 -a $(KERNEL_DUMP_SRC_CHK_FLAG) -eq 1 ]; then \
+-		rm -f /lib/modules/$(KERNEL_DUMP_VER)/kernel/drivers/scsi/mppVhba.ko; \
+-		rm -f /lib/modules/$(KERNEL_DUMP_VER)/kernel/drivers/scsi/mppUpper.ko; \
+-	fi; \
+-	fi
+ 	@rm -f /opt/mpp/genuniqueid
+ 	@rm -f /opt/mpp/hbaCheck
+-	@rm -f /opt/mpp/setupDriver.$(DIST)
++	@rm -f /opt/mpp/setupDriver.*
+ 	@rm -f /opt/mpp/mppiscsi_umountall
+ 	@rm -f /opt/mpp/mppmkinitrd
+ 	@rm -f /opt/mpp/mppMkInitrdHelper
+@@ -338,66 +195,38 @@
+ 	@rm -f /opt/mpp/modprobe.conf.mppappend
+ 	@rm -f /opt/mpp/kernel.suseinitrd
+ 	@rm -f /opt/mpp/lsvdev
+-	@rm -f /usr/sbin/hot_add
+-	@rm -f /usr/sbin/mppBusRescan
+-	@rm -f /usr/sbin/mppUpdate
+-	@rm -f /usr/sbin/mppUtil
+-	@rm -f /usr/share/man/man1/mppUtil.1.gz
+-	@rm -f /usr/share/man/man1/hot_add.1.gz
+-	@rm -f /usr/share/man/man1/mppBusRescan.1.gz
+-	@rm -f /usr/share/man/man9/RDAC.9.gz
+-	@rm -f /usr/share/man/man1/mppUpdate.1.gz
++	@rm -f /usr/local/sbin/hot_add
++	@rm -f /usr/local/sbin/mppBusRescan
++	@rm -f /usr/local/sbin/mppUpdate
++	@rm -f /usr/local/sbin/mppUtil
++	@rm -f /usr/local/share/man/man1/mppUtil.1.gz
++	@rm -f /usr/local/share/man/man1/hot_add.1.gz
++	@rm -f /usr/local/share/man/man1/mppBusRescan.1.gz
++	@rm -f /usr/local/share/man/man9/RDAC.9.gz
++	@rm -f /usr/local/share/man/man1/mppUpdate.1.gz
+ 	@rm -f $(INITRD_DIR)/mpp-$(OS_VER).img
+ 	@if [ -n "$(EXTRA_INITRD_DIR)" ] ; then rm -f $(EXTRA_INITRD_DIR)/mpp-$(OS_VER).img ; fi
+ 	@echo "The mpp RAMdisk image mpp-$(OS_VER).img has been removed. You may want to remove it from your boot loader config file."
+-	@if [ $(KDUMP_STATUS) -eq 1 -a $(KERNEL_DUMP_SRC_CHK_FLAG) -eq 1 ]; then \
+-		if [ "$(DIST)" == "SUSE" ]; then \
+-			rm -f $(INITRD_DIR)/mpp-$(KERNEL_DUMP_VER).img; \
+-			if [ -n "$(EXTRA_INITRD_DIR)" ] ; then rm -f $(EXTRA_INITRD_DIR)/mpp-$(KERNEL_DUMP_VER).img ; fi; \
+-            if [ $(SLES11_FLAG) -ne 1 ]; then \
+-				mv -f $(INITRD_DIR)/initrd-kdump.orig $(INITRD_DIR)/initrd-$(KERNEL_DUMP_VER) 2> /dev/null; \
+-			else \
+-				mv -f $(INITRD_DIR)/initrd-kdump.orig $(INITRD_DIR)/initrd-$(KERNEL_DUMP_VER)-kdump 2> /dev/null; \
+-            fi; \
+-		else \
+-			rm -f $(INITRD_DIR)/mpp-$(KERNEL_DUMP_VER).img; \
+-			mv -f $(INITRD_DIR)/initrd-kdump.orig $(INITRD_DIR)/initrd-$(KERNEL_DUMP_VER)kdump.img 2> /dev/null; \
+-			if [ -n "$(EXTRA_INITRD_DIR)" ] ; then \
+-				rm -f $(EXTRA_INITRD_DIR)/mpp-$(KERNEL_DUMP_VER).img; \
+-				mv -f $(EXTRA_INITRD_DIR)/initrd-kdump.orig $(EXTRA_INITRD_DIR)/initrd-$(KERNEL_DUMP_VER)kdump.img; \
+-			fi; \
+-		fi; \
+-	fi
+ 	@if test ! -s /var/mpp/devicemapping ; then rm -rf /var/mpp/; fi
+ 	@echo "Generating module dependencies..."
+ 	@/sbin/depmod $(OS_VER)
+-	@if [ $(SLES11_FLAG) -ne 1 ]; then \
+-	if [ "$(DIST)" == "SUSE" -a $(KDUMP_STATUS) -eq 1 -a $(KERNEL_DUMP_SRC_CHK_FLAG) -eq 1 ]; then \
+-		/sbin/depmod $(KERNEL_DUMP_VER); \
+-	fi; \
+-	fi
+-	@if [ $(SLES11_FLAG) -eq 1 ]; then \
+-		rm -f /lib/mkinitrd/scripts/setup-mpp.sh; \
+-		rm -f /lib/mkinitrd/scripts/boot-mpp.sh; \
+-		/sbin/mkinitrd_setup; \
+-	fi;
+-	@if [ $(RHEL6_FLAG) -eq 1 ]; then \
+-		rm -f /etc/modprobe.d/mppmodules.conf; \
+-		rm -rf /usr/share/dracut/modules.d/90mpp/ ; \
+-	fi;
++	@rm -f /etc/modprobe.d/mppmodules.conf
++	@rm -rf /usr/local/share/dracut/modules.d/90mpp/
+ 
+ LINUX_RDAC_DIR :=  $(shell pwd)
+ export LINUX_RDAC_DIR
+ 
+ 
+ 
+-KERNEL_VERSION=`grep UTS_RELEASE $(KERNEL_OBJ)/include/linux/version.h | awk '{print $$3}'`
++# KERNEL_VERSION=`grep UTS_RELEASE $(KERNEL_OBJ)/include/linux/version.h | awk '{print $$3}'`
+ 
+ obj-m:= mppUpper.o mppVhba.o
+ mppUpper-objs:=$(DEPENDENT_TARGETS) 
+ mppVhba-objs:=$(VHBA_OBJS)
+ 
+-EXTRA_CFLAGS= -I$(M) -I$(M)/mpp_linux_headers/ -I$(M)/mpp_linux_sys_headers/ -DRHEL6_FLAG=$(RHEL6_FLAG) 
++EXTRA_CFLAGS= -I$(M) -I$(M)/mpp_linux_headers/ -I$(M)/mpp_linux_sys_headers/ \
++	-Wno-attributes
++
+ 
+ ifeq ("1", "$(DEBUG)")
+ 	EXTRA_CFLAGS += -g -DMPP_DEBUG
+@@ -409,48 +238,17 @@
+ endif
+  
+ 
+-mppUpper: kernelsrccheck
+-	@make V=$(V) -C$(KERNEL_OBJ)  M=$(LINUX_RDAC_DIR) MODVERDIR=$(KERNEL_OBJ)/.tmp_versions SUBDIRS=$(PWD) modules && \
+-	mkdir -p $(OS_VER) && cp -f mppUpper.ko $(OS_VER) && \
+-    if [ $(SLES11_FLAG) -ne 1 ]; then \
+-	if [ "$(DIST)" == "SUSE" -a $(KDUMP_STATUS) -eq 1 ]; then \
+-		if [ $(KERNEL_DUMP_SRC_CHK_FLAG) -eq 1 ]; then \
+-			make V=$(V) -C$(KERNEL_DUMP_OBJ)  M=$(LINUX_RDAC_DIR) MODVERDIR=$(KERNEL_DUMP_OBJ)/.tmp_versions SUBDIRS=$(PWD) modules; \
+-			mkdir -p $(KERNEL_DUMP_VER); \
+-			cp -f mppUpper.ko $(KERNEL_DUMP_VER); \
+-		else \
+-			echo "Kernel Dump source is not installed. Don't build driver for kernel dump."; \
+-		fi; \
+-	fi; \
+-    fi
+-
+-mppVhba: kernelsrccheck
+-	@make V=$(V) -C$(KERNEL_OBJ)  M=$(LINUX_RDAC_DIR) MODVERDIR=$(KERNEL_OBJ)/.tmp_versions SUBDIRS=$(PWD) modules && \
+-	cp -f mppVhba.ko $(OS_VER) && \
+-    if [ $(SLES11_FLAG) -ne 1 ]; then \
+-	if [ "$(DIST)" == "SUSE" -a $(KDUMP_STATUS) -eq 1 ]; then \
+-		if [ $(KERNEL_DUMP_SRC_CHK_FLAG) -eq 1 ]; then \
+-			make V=$(V) -C$(KERNEL_DUMP_OBJ)  M=$(LINUX_RDAC_DIR) MODVERDIR=$(KERNEL_DUMP_OBJ)/.tmp_versions SUBDIRS=$(PWD) modules; \
+-			cp -f mppVhba.ko $(KERNEL_DUMP_VER); \
+-		else \
+-			echo "Kernel Dump source is not installed. Don't build driver for kernel dump."; \
+-		fi; \
+-	fi; \
+-    fi
+-
+-clean:  kernelsrccheck
+-	@make V=$(V) -C$(KERNEL_OBJ)  M=$(LINUX_RDAC_DIR) MODVERDIR=$(KERNEL_OBJ)/.tmp_versions SUBDIRS=$(PWD) clean && \
+-	rm -fr $(OS_VER) && \
+-    if [ $(SLES11_FLAG) -ne 1 ]; then \
+-	if [ "$(DIST)" == "SUSE" -a $(KDUMP_STATUS) -eq 1 ]; then \
+-		if [ $(KERNEL_DUMP_SRC_CHK_FLAG) -eq 1 ]; then \
+-			make V=$(V) -C$(KERNEL_DUMP_OBJ)  M=$(LINUX_RDAC_DIR) MODVERDIR=$(KERNEL_DUMP_OBJ)/.tmp_versions SUBDIRS=$(PWD) clean; \
+-			rm -fr $(KERNEL_DUMP_VER); \
+-		else \
+-			echo "Kernel Dump source is not installed. Don't clean driver for kernel dump."; \
+-		fi; \
+-	fi; \
+-    fi
++mppUpper:
++	@make V=$(V) -C$(KERNEL_OBJ)  M=$(LINUX_RDAC_DIR) SUBDIRS=$(PWD) modules && \
++	mkdir -p $(OS_VER) && cp -f mppUpper.ko $(OS_VER)
++
++mppVhba:
++	@make V=$(V) -C$(KERNEL_OBJ)  M=$(LINUX_RDAC_DIR) SUBDIRS=$(PWD) modules && \
++	cp -f mppVhba.ko $(OS_VER)
++
++clean:
++	@make V=$(V) -C$(KERNEL_OBJ)  M=$(LINUX_RDAC_DIR) SUBDIRS=$(PWD) clean && \
++	rm -fr $(OS_VER)
+ 	rm -f Module.symvers
+ 	rm -f mppUtil 
+ 	rm -f genuniqueid
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/MPP_hba.c linuxrdac-09.03.0C06.0452.2/MPP_hba.c
+--- linuxrdac-09.03.0C06.0452.2.orig/MPP_hba.c	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/MPP_hba.c	2011-10-27 00:31:41.134285979 +0200
+@@ -54,7 +54,7 @@
+ /***  CONSTANT DEFINITIONS  ***/
+ TEXT mpp_VendorId[9] = "        \0";
+ TEXT mpp_ProductId[17] = "                \0";
+-TEXT mpp_Version[16] = RAID_MANAGER_VERSION;
++TEXT mpp_Version[18] = RAID_MANAGER_VERSION"\0";
+ 
+ LWORD mpp_Debug = MPPCMN_DEFAULT_DEBUG_LEVEL;
+ LWORD mpp_NotReadyWaitTime = MPPCMN_DEFAULT_NOTREADYWAITTIME;
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mpp_linux_headers/MPP_Common.h linuxrdac-09.03.0C06.0452.2/mpp_linux_headers/MPP_Common.h
+--- linuxrdac-09.03.0C06.0452.2.orig/mpp_linux_headers/MPP_Common.h	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mpp_linux_headers/MPP_Common.h	2011-10-27 00:31:41.144286568 +0200
+@@ -728,7 +728,7 @@
+ /***  GLOBALS  ***/
+ extern TEXT mpp_VendorId[9];
+ extern TEXT mpp_ProductId[17];
+-extern TEXT mpp_Version[16];
++extern TEXT mpp_Version[18];
+ 
+ extern LWORD mpp_Debug;
+ extern LWORD mpp_NotReadyWaitTime;
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mpp_linux_sys_headers/mppLnx26p_prototypes.h linuxrdac-09.03.0C06.0452.2/mpp_linux_sys_headers/mppLnx26p_prototypes.h
+--- linuxrdac-09.03.0C06.0452.2.orig/mpp_linux_sys_headers/mppLnx26p_prototypes.h	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mpp_linux_sys_headers/mppLnx26p_prototypes.h	2011-10-27 00:31:41.144286568 +0200
+@@ -138,7 +138,7 @@
+ /* Function declarations for file operations */
+ static int mppLnx_open(struct inode *inode, struct file *file);
+ static int mppLnx_release(struct inode *inode, struct file *file);
+-static int mppLnx_ioctl(struct inode *inode, struct file *file, unsigned int cmd_in, unsigned long arg);
++static long mppLnx_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg);
+ 
+ /* Function to identify the disk type for a struct scsi_device */
+ static LWORD mppLnx_DeviceType(struct scsi_device*, LunPathInfo_t **lunPathInfo, RdacDeviceInformation_t **rdacinfo);
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mpp_linux_sys_headers/mppLnx26p_vhba.h linuxrdac-09.03.0C06.0452.2/mpp_linux_sys_headers/mppLnx26p_vhba.h
+--- linuxrdac-09.03.0C06.0452.2.orig/mpp_linux_sys_headers/mppLnx26p_vhba.h	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mpp_linux_sys_headers/mppLnx26p_vhba.h	2011-10-27 00:31:41.144286568 +0200
+@@ -494,7 +494,7 @@
+ int mppLnx_proc_info(struct Scsi_Host *, char *, char **, off_t, int, int);
+ 
+ const char * mppLnx_info(struct Scsi_Host * shp);
+-int mppLnx_queuecommand(struct scsi_cmnd * scp, void (*done)(struct scsi_cmnd *));
++int mppLnx_queuecommand(struct Scsi_Host * shp, struct scsi_cmnd * scp);
+ int mppLnx_eh_device_reset_handler(struct scsi_cmnd * scp);
+ int mppLnx_eh_bus_reset_handler(struct scsi_cmnd * scp);
+ int mppLnx_eh_host_reset_handler(struct scsi_cmnd * scp);
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mpp_linux_sys_headers/MPP_Sysdep.h linuxrdac-09.03.0C06.0452.2/mpp_linux_sys_headers/MPP_Sysdep.h
+--- linuxrdac-09.03.0C06.0452.2.orig/mpp_linux_sys_headers/MPP_Sysdep.h	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mpp_linux_sys_headers/MPP_Sysdep.h	2011-10-27 00:31:41.144286568 +0200
+@@ -46,7 +46,7 @@
+ 
+ /***  INCLUDES  ***/
+ #ifdef __KERNEL__
+-#include <linux/autoconf.h>
++#include <generated/autoconf.h>
+ #include <linux/module.h>
+ #include <linux/version.h>
+ #include <linux/kernel.h>
+@@ -62,7 +62,6 @@
+ #include <linux/genhd.h>
+ #include <linux/fs.h>
+ #include <linux/init.h>
+-#include <linux/smp_lock.h>
+ #include <linux/time.h>
+ #include <linux/proc_fs.h>
+ #include <linux/kdev_t.h>
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_upper.c linuxrdac-09.03.0C06.0452.2/mppLnx26p_upper.c
+--- linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_upper.c	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppLnx26p_upper.c	2011-10-27 00:31:41.144286568 +0200
+@@ -62,7 +62,7 @@
+ #include <linux/list.h>
+ #include <linux/err.h>
+ #include <scsi/scsi_eh.h>
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)) && !(RHEL6_FLAG == 1)
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)) && (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32))
+ #include <../drivers/base/base.h>
+ #endif
+ 
+@@ -132,7 +132,7 @@
+ 
+ MPP_MUTEX_T  mppLnx_rdac_mutex;
+ struct list_head mpp_hot_plug_list;
+-spinlock_t mpp_hot_plug_spin_lock = SPIN_LOCK_UNLOCKED;
++DEFINE_SPINLOCK(mpp_hot_plug_spin_lock);
+ 
+ /* MPP configuration parameter structure declaration */
+ struct mpp_Config_Parameters mppLnx_Config_Parameters;
+@@ -145,7 +145,7 @@
+     .read = NULL,
+     .write = NULL,
+     .open = mppLnx_open,
+-    .ioctl = mppLnx_ioctl,
++    .unlocked_ioctl = mppLnx_ioctl,
+     .release = mppLnx_release
+ };
+ 
+@@ -223,7 +223,7 @@
+         (MPPCMN_FEATURE_CALLBACK_FUNC)mppCmn_LunScanDelayFeatureCallback}
+ };
+ 
+-static spinlock_t unconfiguredDevice_lock = SPIN_LOCK_UNLOCKED;
++static DEFINE_SPINLOCK(unconfiguredDevice_lock);
+ static mppLnx_UnconfiguredDeviceList_t  unconfiguredDeviceList;
+ static int mppLnx_major;
+ 
+@@ -430,7 +430,7 @@
+     if(!mppCmn_AllowHBAsgDevs)
+     {
+ 
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) && (RHEL6_FLAG == 1) // To handle RHEL6 case
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) // To handle RHEL6 case
+         list_for_each_entry(class_intf, mpp_interface.node.next, node)
+ #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27))
+         list_for_each_entry(class_intf, &mpp_interface.class->p->class_interfaces, node) // To handle SLES11 SP1 case
+@@ -506,7 +506,7 @@
+     {
+         /* restore function pointers */
+ 
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) && (RHEL6_FLAG == 1) // To handle RHEL6 case
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) // To handle RHEL6 case
+         list_for_each_entry(class_intf, mpp_interface.node.next, node)
+ #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27))
+         list_for_each_entry(class_intf, &mpp_interface.class->p->class_interfaces, node) // To handle SLES11 SP1 case
+@@ -703,7 +703,7 @@
+     /* CR153801 */
+     if(!mppCmn_AllowHBAsgDevs)
+     {
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) && (RHEL6_FLAG == 1) // To handle RHEL6 case
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)) // To handle RHEL6 case
+         list_for_each_entry(class_intf, mpp_interface.node.next, node)
+ #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27))
+         list_for_each_entry(class_intf, &mpp_interface.class->p->class_interfaces, node) // To handle SLES11 SP1 case
+@@ -2381,7 +2381,7 @@
+ *
+ */
+ 
+-static int mppLnx_ioctl(struct inode *inode, struct file *file, unsigned int cmd_in, unsigned long arg)
++static long mppLnx_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg)
+ {
+     getRdacInfoIoctl_t UserArg;
+     mpp_utilGetStatusIoctl_t UtilArg;
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhba.c linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhba.c
+--- linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhba.c	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhba.c	2011-10-27 00:31:41.144286568 +0200
+@@ -64,7 +64,6 @@
+ #include <linux/fs.h>
+ #include <linux/init.h>
+ #include <linux/proc_fs.h>
+-#include <linux/smp_lock.h>
+ #include <linux/vmalloc.h>
+ #include <linux/spinlock.h>
+ #include <linux/list.h>
+@@ -260,7 +259,6 @@
+ * completion function) and its time out function public. We must get them from a struct scsi_cmnd
+ * and save them for later use.
+ */
+-void (*middle_level_scsi_done)(struct scsi_cmnd *) = NULL;
+ void (*middle_level_timeoutfunc)(struct scsi_cmnd *) = NULL;
+ /***  PROCEDURES  ***/
+ static void mppLnx_set_command_timeout(struct scsi_host_template *pshtp);
+@@ -2646,7 +2644,7 @@
+             /* disable the clustering  for all the virtual luns already discovered by the virtual host */
+             shost_for_each_device(vSDp, vshp)
+             {
+-                clear_bit(QUEUE_FLAG_CLUSTER, &vSDp->request_queue->queue_flags);
++		vSDp->request_queue->limits.cluster = 0;
+             }
+         }
+     }
+@@ -2660,7 +2658,7 @@
+         /* change the table size for all the virtual luns already discovered by the virtual host */
+         shost_for_each_device(vSDp, vshp)
+         {
+-#if (RHEL6_FLAG == 1)
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34))
+             blk_queue_max_segments(vSDp->request_queue, vshp->sg_tablesize);
+ #else
+             blk_queue_max_hw_segments(vSDp->request_queue, vshp->sg_tablesize);
+@@ -2678,7 +2676,7 @@
+         /* change the max_sectors for all the virtual luns already discovered by the virtual host */
+         shost_for_each_device(vSDp, vshp)
+         {
+-#if (RHEL6_FLAG == 1)
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34))
+             blk_queue_max_hw_sectors(vSDp->request_queue, vshp->max_sectors);
+ #else
+             blk_queue_max_sectors(vSDp->request_queue, vshp->max_sectors);
+@@ -3165,7 +3163,7 @@
+     * DEBUG
+     * check virtual and physical device's request_queue_t attributes
+     */
+-#if (RHEL6_FLAG == 1)
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34))
+     MPP_DEBUGPRINT((MPP_INIT_DEBUG+MPP_DEBUG_LEVEL_1,
+                     "virtual device bounce_pfn %ld bounce_gfp %d queue_flags %ld max_sectors %d logical_block_size %d max_segment_size %d seg_boundary_mask %ld dma_alignment %d\n",
+                     sdev->request_queue->limits.bounce_pfn,
+@@ -3799,7 +3797,7 @@
+     return -1;
+ }
+ 
+-int mppLnx_queuecommand(struct scsi_cmnd * vSCp, void (*done)(struct scsi_cmnd *))
++int mppLnx_queuecommand(struct Scsi_Host * shp, struct scsi_cmnd * vSCp)
+ {
+     int                  vchannel = vSCp->device->channel;
+     int                  targetId = vSCp->device->id;
+@@ -3828,7 +3826,6 @@
+                     vSCp->device->id,
+                     vSCp->device->lun));
+ 
+-    vSCp->scsi_done = done;
+     /*
+     * validate the command
+     */
+@@ -3939,20 +3936,6 @@
+         }
+     }
+ 
+-    if(unlikely(done == NULL))
+-    {
+-        MPP_ERRORLOGPRINT((MPP_ERR_FATAL, 903,
+-                           "mppLnx_queuecommand NULL done function target %d lun %d\n",
+-                           targetId,lun));
+-        return 0;
+-    }
+-    if(unlikely(middle_level_scsi_done == NULL))
+-    {
+-        /**
+-        * save the middle level scsi done function
+-        */
+-        middle_level_scsi_done = done;
+-    }
+     /*
+     * if debug driver, dump read/write cdb
+     */
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbaio.c linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbaio.c
+--- linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbaio.c	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbaio.c	2011-10-27 00:31:41.144286568 +0200
+@@ -69,7 +69,6 @@
+ #include <linux/fs.h>
+ #include <linux/init.h>
+ #include <linux/proc_fs.h>
+-#include <linux/smp_lock.h>
+ #include <linux/vmalloc.h>
+ #include <linux/spinlock.h>
+ #include <linux/list.h>
+@@ -103,7 +102,6 @@
+ 
+ /***  TYPE DEFINITIONS  ***/
+ 
+-extern void (*middle_level_scsi_done)(struct scsi_cmnd *);
+ extern void (*middle_level_timeoutfunc)(struct scsi_cmnd *);
+ 
+ /*** EXTERNAL GLOBAL VARIABLES ***/
+@@ -645,7 +643,7 @@
+     *   gets unplugged, the request_fn defined for the queue is invoked and
+     *   transfers started.
+     **/
+-    generic_unplug_device(pSDp->request_queue);
++    blk_run_queue(pSDp->request_queue);
+ 
+ 
+     MPP_DEBUGPRINT((MPP_HBA_COMMAND_DEBUG+MPP_DEBUG_LEVEL_1,
+@@ -813,7 +811,7 @@
+     * unplug the device and let the request go
+     */
+ 
+-    generic_unplug_device(pSDp->request_queue);
++    blk_run_queue(pSDp->request_queue);
+ 
+     return 0;
+ }
+@@ -1187,7 +1185,7 @@
+         return (MPP_GOOD_STATUS);
+     }
+ 
+-    generic_unplug_device(pSDp->request_queue);
++    blk_run_queue(pSDp->request_queue);
+ 
+     MPP_DEBUGPRINT((MPP_PATH_VALIDATION_DEBUG+MPP_DEBUG_LEVEL_1,
+                     "Exitng mppLnx_validatePath() for T%dL%dCtrl%dPath%d\n",
+@@ -2250,7 +2248,7 @@
+     *
+     */
+ 
+-    generic_unplug_device(pSDp->request_queue);
++    blk_run_queue(pSDp->request_queue);
+ 
+     MPP_DEBUGPRINT((MPP_FAILOVER_IO_DEBUG+MPP_DEBUG_LEVEL_1,
+                     "Exitng mppLnx_IssueFailover() for T%dL%dCtrl%d\n",
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbalib.c linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbalib.c
+--- linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbalib.c	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbalib.c	2011-10-27 00:31:41.144286568 +0200
+@@ -62,7 +62,6 @@
+ #include <linux/fs.h>
+ #include <linux/init.h>
+ #include <linux/proc_fs.h>
+-#include <linux/smp_lock.h>
+ #include <linux/vmalloc.h>
+ #include <linux/spinlock.h>
+ #include <linux/list.h>
+@@ -108,7 +107,7 @@
+ /*
+ *declare a spinlock for protecting the context of the mppLnxVHBAContext
+ */
+-static spinlock_t mppLnxVHBAContext_Lock = SPIN_LOCK_UNLOCKED;
++static DEFINE_SPINLOCK(mppLnxVHBAContext_Lock);
+ 
+ /* list for adding the ProxyRequest blocks */
+ //static mppLnx_ProxyRequestEntry_t     mppLnx_ProxyRequest_List;
+@@ -157,19 +156,19 @@
+ {
+ 
+     INIT_LIST_HEAD(&mppLnx_freeProxyRequestQ.list);
+-    mppLnx_freeProxyRequestQ.queueLock = SPIN_LOCK_UNLOCKED;
++    spin_lock_init(&mppLnx_freeProxyRequestQ.queueLock);
+     mppLnx_freeProxyRequestQ.queueType = MPPLNX_QUEUE_FREE_LIST;
+ 
+     INIT_LIST_HEAD(&mppLnx_s2tos3ProxyRequestQ.list);
+-    mppLnx_s2tos3ProxyRequestQ.queueLock = SPIN_LOCK_UNLOCKED;
++    spin_lock_init(&mppLnx_s2tos3ProxyRequestQ.queueLock);
+     mppLnx_s2tos3ProxyRequestQ.queueType = MPPLNX_QUEUE_S2TOS3_LIST;
+ 
+     INIT_LIST_HEAD(&mppLnx_pathvalidationProxyRequestQ.list);
+-    mppLnx_pathvalidationProxyRequestQ.queueLock = SPIN_LOCK_UNLOCKED;
++    spin_lock_init(&mppLnx_pathvalidationProxyRequestQ.queueLock);
+     mppLnx_pathvalidationProxyRequestQ.queueType = MPPLNX_QUEUE_PATHVALIDATION_LIST;
+ 
+     INIT_LIST_HEAD(&mppLnx_freeAsyncRequestQ.list);
+-    mppLnx_freeAsyncRequestQ.queueLock = SPIN_LOCK_UNLOCKED;
++    spin_lock_init(&mppLnx_freeAsyncRequestQ.queueLock);
+ 
+ }
+ /*******************************************************************************
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbamisc.c linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbamisc.c
+--- linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbamisc.c	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbamisc.c	2011-10-27 00:31:41.144286568 +0200
+@@ -61,7 +61,6 @@
+ #include <linux/fs.h>
+ #include <linux/init.h>
+ #include <linux/proc_fs.h>
+-#include <linux/smp_lock.h>
+ #include <linux/vmalloc.h>
+ #include <linux/spinlock.h>
+ #include <linux/list.h>
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbaproc.c linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbaproc.c
+--- linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbaproc.c	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbaproc.c	2011-10-27 00:31:41.144286568 +0200
+@@ -68,7 +68,6 @@
+ #include <linux/fs.h>
+ #include <linux/init.h>
+ #include <linux/proc_fs.h>
+-#include <linux/smp_lock.h>
+ #include <linux/vmalloc.h>
+ #include <linux/spinlock.h>
+ #include <linux/list.h>
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbatask.c linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbatask.c
+--- linuxrdac-09.03.0C06.0452.2.orig/mppLnx26p_vhbatask.c	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbatask.c	2011-10-27 00:31:41.144286568 +0200
+@@ -72,7 +72,6 @@
+ #include <linux/fs.h>
+ #include <linux/init.h>
+ #include <linux/proc_fs.h>
+-#include <linux/smp_lock.h>
+ #include <linux/vmalloc.h>
+ #include <linux/spinlock.h>
+ #include <linux/list.h>
+@@ -493,7 +492,6 @@
+     *  4. set a nice value
+     *
+     */
+-    lock_kernel();
+     daemonize(MPPLNX_PATHVALIDATE_PROC_NAME);
+     allow_signal(SIGHUP);
+     set_user_nice(current,-20);
+@@ -504,7 +502,6 @@
+     MPP_DEBUGPRINT((MPP_PATH_VALIDATION_DEBUG+MPP_DEBUG_LEVEL_1,
+                     "mppLnx_pathvalidate_handler release the kernel\n"));
+ 
+-    unlock_kernel();
+ 
+     /*
+      * Wake up the thread that created us.
+@@ -746,7 +743,6 @@
+      *  4. set a nice value
+      *
+      */
+-    lock_kernel();
+     daemonize(MPPLNX_FAILBACK_PROC_NAME);
+     allow_signal(SIGHUP);
+     set_user_nice(current,-20);
+@@ -761,7 +757,6 @@
+     MPP_DEBUGPRINT((MPP_FAILOVERSCAN_DEBUG+MPP_DEBUG_LEVEL_1,
+                     "mppLnx_failback_handler release the kernel\n"));
+ 
+-    unlock_kernel();
+ 
+     /*
+      * Wake up the thread that created us.
+@@ -969,7 +964,6 @@
+     */
+     MPP_DEBUGPRINT((MPP_RESERVE_DEBUG+MPP_DEBUG_LEVEL_1,
+                     "mppLnx_worker_handler() lock the kernel\n"));
+-    lock_kernel();
+ 
+     daemonize(MPPLNX_SYNCIO_WORKER_PROC_NAME);
+     allow_signal(SIGHUP);
+@@ -978,7 +972,6 @@
+     MPP_DEBUGPRINT((MPP_RESERVE_DEBUG+MPP_DEBUG_LEVEL_1,
+                     "mppLnx_worker_handler released the kernel\n"));
+ 
+-    unlock_kernel();
+ 
+     /*
+      * Wake up the thread that created us.
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/mppSupport linuxrdac-09.03.0C06.0452.2/mppSupport
+--- linuxrdac-09.03.0C06.0452.2.orig/mppSupport	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppSupport	2011-11-02 13:42:58.455798126 +0100
+@@ -32,12 +32,12 @@
+ ##############################################################################
+ initialize_fn()
+ {
+-    if [ ! -f /usr/sbin/mppUtil ]
++    if [ ! -f /usr/local/sbin/mppUtil ]
+     then
+         #the mpp driver is not installed
+         MPPLNX_VERSION="no_linux_mpp_driver"
+     else
+-        MPPLNX_VERSION=$(/usr/sbin/mppUtil -V|/bin/awk -F":" '{print $2}'|/bin/sed -e 's/\./_/g;s/ //g')
++        MPPLNX_VERSION=$(/usr/local/sbin/mppUtil -V|/bin/awk -F":" '{print $2}'|/bin/sed -e 's/\./_/g;s/ //g')
+     fi
+ 	if [ -f /etc/redhat-release ]; then DISTRO=redhat; else DISTRO=SuSE; fi
+     TMP_DIR=/tmp/mppSupport_$$
+@@ -556,9 +556,9 @@
+ 
+     /bin/mkdir -p ${LINUXMPP_INFO_DIR}
+ 
+-    if [ -f /usr/sbin/mppUtil ]
++    if [ -f /usr/local/sbin/mppUtil ]
+     then
+-        /usr/sbin/mppUtil -C >${LINUXMPP_INFO_DIR}/mppLnx_source_versions.txt
++        /usr/local/sbin/mppUtil -C >${LINUXMPP_INFO_DIR}/mppLnx_source_versions.txt
+     else
+         echo "Linux MPP driver is not installed on the system "\
+                 >${LINUXMPP_INFO_DIR}/mppLnx_source_versions.txt
+@@ -639,13 +639,13 @@
+             >${LINUXMPP_INFO_DIR}/devicemapping.conf
+     fi
+ 
+-    if [ -f /usr/sbin/mppUtil ]
++    if [ -f /usr/local/sbin/mppUtil ]
+     then
+-        MAX_ARRAY=$(/usr/sbin/mppUtil -m|/bin/awk -F"=" '{print $2}' |/bin/sed -e 's/ //g')
++        MAX_ARRAY=$(/usr/local/sbin/mppUtil -m|/bin/awk -F"=" '{print $2}' |/bin/sed -e 's/ //g')
+         declare -i index=0
+         while [ $index -lt ${MAX_ARRAY} ]
+         do
+-            /usr/sbin/mppUtil -g $index 2>/dev/null
++            /usr/local/sbin/mppUtil -g $index 2>/dev/null
+             let index+=1
+         done >${LINUXMPP_INFO_DIR}/array_info.txt
+     else
+@@ -665,11 +665,11 @@
+ 		echo " Does not collect io statistics info">${LINUXMPP_INFO_DIR}/io_statistics.txt
+     fi
+ 
+-    if [ -f /usr/sbin/mppUtil ]
++    if [ -f /usr/local/sbin/mppUtil ]
+     then
+ 		if [ $MPPLNX_DOIO -eq 1 ]
+ 		then 
+-			/usr/sbin/mppUtil -S >${LINUXMPP_INFO_DIR}/mppUtil_S_out.txt
++			/usr/local/sbin/mppUtil -S >${LINUXMPP_INFO_DIR}/mppUtil_S_out.txt
+ 		else
+ 			echo " Does not collect mppUtil -S info">${LINUXMPP_INFO_DIR}/mppUtil_S_out.txt
+ 		fi
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/utility/mppBusRescan.1 linuxrdac-09.03.0C06.0452.2/utility/mppBusRescan.1
+--- linuxrdac-09.03.0C06.0452.2.orig/utility/mppBusRescan.1	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/utility/mppBusRescan.1	2011-11-02 13:40:49.967761176 +0100
+@@ -83,7 +83,7 @@
+ .br
+         no new device found
+ .br
+-run /usr/sbin/mppUtil -s busscan...
++run /usr/local/sbin/mppUtil -s busscan...
+ .br
+ scan mpp virtual host /sys/class/scsi_host/host6...
+ .br
+@@ -91,7 +91,7 @@
+ .br
+         found 6:0:0:9->/dev/sdp
+ .br
+-/usr/sbin/hot_add is completed.
++/usr/local/sbin/hot_add is completed.
+ .br
+ 
+ host_name:~ # hot_add -d
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/utility/mppBusRescan26p linuxrdac-09.03.0C06.0452.2/utility/mppBusRescan26p
+--- linuxrdac-09.03.0C06.0452.2.orig/utility/mppBusRescan26p	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/utility/mppBusRescan26p	2011-11-02 13:44:23.381110353 +0100
+@@ -217,7 +217,7 @@
+ #*****************************************************************************
+ mppLnx_build_cmd_fn()
+ {
+-    echo "${SCSI_ENTRY}"|/usr/bin/awk -F"/" -v QLA4x_PROC=${QLA4x_PROC}\
++    echo "${SCSI_ENTRY}"|awk -F"/" -v QLA4x_PROC=${QLA4x_PROC}\
+      -v IS_SOFTWARE_ISCSI=${IS_SOFTWARE_ISCSI} \
+      -v LSI_SCSIHPROC=${LSI_SCSIHPROC}\
+      -v LSI_SASPROC=${LSI_SASPROC}\
+@@ -538,10 +538,10 @@
+         # tell mpp driver to rescan its un-configured devices
+         # unconfigured device may become configured. We need to report the device changes
+         #****************
+-        printf("echo run  /usr/sbin/mppUtil -s \"busscan\"...\n")
++        printf("echo run  /usr/local/sbin/mppUtil -s \"busscan\"...\n")
+         printf("export PDEV_BEFORE_SCAN=$(%s)\n",LS_MPP_DEVS);
+         printf("export VDEV_BEFORE_SCAN=$(%s)\n",LS_SD_DEVS)
+-        print("/usr/sbin/mppUtil -s \"busscan\"")
++        print("/usr/local/sbin/mppUtil -s \"busscan\"")
+         printf("export PDEV_AFTER_SCAN=$(%s)\n",LS_MPP_DEVS);
+         printf("mppLnx_report_new_pdev_fn \"no\"\n");
+         printf("export VDEV_AFTER_SCAN=$(%s)\n",LS_SD_DEVS)
+@@ -567,7 +567,7 @@
+ mppLnx_report_new_pdev_fn()
+ {
+     echo  "${PDEV_BEFORE_SCAN}${NEWLINE}${MPPLNX_MAGIC_LINE}${NEWLINE}${PDEV_AFTER_SCAN}" |\
+-    /usr/bin/awk \
++    awk \
+     -F"/" \
+     -v MPPLNX_MAGIC_LINE=${MPPLNX_MAGIC_LINE} \
+     -v REPORT_NO_DEVICE="$1"\
+@@ -606,7 +606,7 @@
+ mppLnx_report_new_vdev_fn()
+ {
+     echo  "${VDEV_BEFORE_SCAN}${NEWLINE}${MPPLNX_MAGIC_LINE}${NEWLINE}${VDEV_AFTER_SCAN}" \
+-    |/usr/bin/awk -F"/" \
++    |awk -F"/" \
+     -v MPPLNX_MAGIC_LINE=${MPPLNX_MAGIC_LINE} \
+     -v REPORT_NO_DEVICE="$1"\
+     '{
+@@ -922,7 +922,7 @@
+ if [ "${MPPLNX_RUN_SCRIPT}" != "168" ]
+ then
+ 
+-    MPP_UTIL="/usr/sbin/mppUtil"
++    MPP_UTIL="/usr/local/sbin/mppUtil"
+ 
+     if [ ! -x ${MPP_UTIL} ]
+     then
+diff -ur linuxrdac-09.03.0C06.0452.2.orig/utility/mppUpdate26p linuxrdac-09.03.0C06.0452.2/utility/mppUpdate26p
+--- linuxrdac-09.03.0C06.0452.2.orig/utility/mppUpdate26p	2011-01-12 23:37:22.000000000 +0100
++++ linuxrdac-09.03.0C06.0452.2/utility/mppUpdate26p	2011-11-02 13:40:22.346033467 +0100
+@@ -38,7 +38,7 @@
+ 
+ 
+ DEVICE_MAP_FILE=/var/mpp/devicemapping
+-MPP_UTIL_FILE=/usr/sbin/mppUtil
++MPP_UTIL_FILE=/usr/local/sbin/mppUtil
+ TEMP_DEVICE_MAP_FILE=/tmp/devicemapping.$$
+ TEMP_DEVICE_LIST=/tmp/deviceList.$$
+ TEMP_MODULE_LIST=/tmp/moduleList.$$
