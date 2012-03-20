@@ -6,7 +6,7 @@
 
 %define		_enable_debug_packages	0
 
-%define		rel	1
+%define		rel	2
 %define		pname	kernel-scsi-mpprdac
 Summary:	RDAC Multi-Path Proxy Driver for Linux
 Name:		%{pname}%{_alt_kernel}
