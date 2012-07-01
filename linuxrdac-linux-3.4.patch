@@ -1,0 +1,12 @@
+--- linuxrdac-09.03.0C06.0452.2/dkms_source_tree/mpp_linux_sys_headers/MPP_Sysdep.h.orig	2012-07-01 15:13:42.047035902 +0200
++++ linuxrdac-09.03.0C06.0452.2/dkms_source_tree/mpp_linux_sys_headers/MPP_Sysdep.h	2012-07-01 15:16:29.057030011 +0200
+@@ -68,7 +68,9 @@
+ #include <linux/blkdev.h>
+ #include <linux/delay.h>
+ #include <asm/uaccess.h>
++#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 4, 0)
+ #include <asm/system.h>
++#endif
+ #include <asm/io.h>
+ #include <asm/param.h>
+ #include <scsi/scsi.h>
