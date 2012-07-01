@@ -39,18 +39,16 @@ RDAC Multi-Path Proxy Driver for Linux.
 
 %prep
 %setup -q -c
-cd dkms_source_tree
+mv dkms_source_tree/* .
 %patch0 -p1
 %patch1 -p2
 
 %build
-cd dkms_source_tree
-
-%{__make} -j1 KERNEL_OBJ=%{_kernelsrcdir}
+%{__make} -j1 \
+	KERNEL_OBJ=%{_kernelsrcdir}
 
 %install
 rm -rf $RPM_BUILD_ROOT
-cd dkms_source_tree
 
 %install_kernel_modules -m mppVhba,mppUpper -d kernel/drivers/scsi
 
@@ -65,4 +63,5 @@ rm -rf $RPM_BUILD_ROOT
 
 %files -n kernel%{_alt_kernel}-scsi-mpprdac
 %defattr(644,root,root,755)
+%doc Readme.txt
 /lib/modules/%{_kernel_ver}/kernel/drivers/scsi/*.ko*
