@@ -3,7 +3,7 @@
 %bcond_without	dist_kernel	# allow non-distribution kernel
 %bcond_with	verbose		# verbose build (V=1)
 
-%define		rel	17
+%define		rel	18
 %define		pname	linuxrdac
 Summary:	RDAC Multi-Path Proxy Driver for Linux
 Name:		%{pname}%{_alt_kernel}
