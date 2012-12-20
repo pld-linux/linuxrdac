@@ -3,7 +3,7 @@
 %bcond_without	dist_kernel	# allow non-distribution kernel
 %bcond_with	verbose		# verbose build (V=1)
 
-%define		rel	28
+%define		rel	29
 %define		pname	linuxrdac
 Summary:	RDAC Multi-Path Proxy Driver for Linux
 Name:		%{pname}%{_alt_kernel}
@@ -15,6 +15,7 @@ Source0:	linuxrdac-%{version}-mktarball.dkms.tgz
 # Source0-md5:	da1dadb0d8ac09661bb407386a212a82
 Patch0:		linuxrdac-linux-2.6.39.patch
 Patch1:		linuxrdac-linux-3.4.patch
+Patch2:		linuxrdac-linux-3.7.patch
 #URL:		-
 BuildRequires:	rpmbuild(macros) >= 1.379
 %{?with_dist_kernel:BuildRequires:	kernel%{_alt_kernel}-module-build >= 3:2.6.20.2}
@@ -41,6 +42,7 @@ RDAC Multi-Path Proxy Driver for Linux.
 mv dkms_source_tree/* .
 %patch0 -p1
 %patch1 -p2
+%patch2 -p1
 
 %build
 %{__make} -j1 \

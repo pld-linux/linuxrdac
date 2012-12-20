@@ -1,0 +1,93 @@
+--- linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbaio.c~	2012-12-20 13:08:02.742375642 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhbaio.c	2012-12-20 13:14:18.695202316 +0100
+@@ -4372,7 +4372,11 @@
+         {
+             int ret;
+ 
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0))
++            ret = bio_integrity_clone(b, bio, gfp_mask);
++#else
+             ret = bio_integrity_clone(b, bio, gfp_mask, NULL);
++#endif
+ 
+             if(ret < 0)
+                 return NULL;
+--- linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhba.c~	2012-12-20 13:14:58.168833926 +0100
++++ linuxrdac-09.03.0C06.0452.2/mppLnx26p_vhba.c	2012-12-20 13:41:45.641884855 +0100
+@@ -69,6 +69,7 @@
+ #include <linux/list.h>
+ #include <linux/device.h>
+ #include <linux/interrupt.h>
++#include <linux/kthread.h>
+ #include <scsi/scsi_host.h>
+ #include <scsi/scsicam.h>
+ #include <scsi/scsi_tcq.h>
+@@ -2111,6 +2111,9 @@
+ int mppLnx_init_virtual_hba(int fromVscan)
+ {
+     struct scsi_host_template      * pshtp = NULL;
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0))
++    struct task_struct* task;
++#endif
+ 
+     MPP_DEBUGPRINT((MPP_INIT_DEBUG+MPP_DEBUG_LEVEL_1,"Entering mppLnx_detect()\n"));
+ 
+@@ -2174,11 +2177,19 @@
+     mppLnxFailbackScanContext.failback_pidPtr = NULL;
+ #endif
+ 
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0))
++    task = kthread_run(mppLnx_failback_handler, NULL, "mpp_failback_%d", 0);
++    if (!IS_ERR(task)) {
++	mppLnxFailbackScanContext.failback_pid = task->pid;
++    } else {
++	mppLnxFailbackScanContext.failback_pid = -1;
++#else
+     mppLnxFailbackScanContext.failback_pid =
+         kernel_thread((int (*)(void *))mppLnx_failback_handler, NULL, 0);
+ 
+     if(mppLnxFailbackScanContext.failback_pid < 0)
+     {
++#endif
+         goto failback_errorout;
+     }
+     /*
+@@ -2205,11 +2216,19 @@
+     mppLnxPathValidateContext.pathvalidate_pidPtr = NULL;
+ #endif
+ 
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0))
++    task = kthread_run(mppLnx_pathvalidate_handler, NULL, "mpp_pathvalidate_%d", 0);
++    if (!IS_ERR(task)) {
++	mppLnxPathValidateContext.pathvalidate_pid = task->pid;
++    } else {
++	mppLnxPathValidateContext.pathvalidate_pid = -1;
++#else
+     mppLnxPathValidateContext.pathvalidate_pid =
+         kernel_thread((int (*)(void *))mppLnx_pathvalidate_handler, NULL, 0);
+ 
+     if(mppLnxPathValidateContext.pathvalidate_pid < 0)
+     {
++#endif
+         goto pathvalidate_errorout;
+     }
+     /*
+@@ -2234,10 +2253,18 @@
+ #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27))
+     mppLnxWorkerQueueContextContext.workerQueue_pidPtr = NULL;
+ #endif
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,7,0))
++    task = kthread_run(mppLnx_worker_handler, NULL, "mppWorker_%d", 0);
++    if (!IS_ERR(task)) {
++	mppLnxWorkerQueueContextContext.workerQueue_pid = task->pid;
++    } else {
++	mppLnxWorkerQueueContextContext.workerQueue_pid = -1;
++#else
+     mppLnxWorkerQueueContextContext.workerQueue_pid =
+         kernel_thread((int (*)(void *))mppLnx_worker_handler, NULL, 0);
+     if(mppLnxWorkerQueueContextContext.workerQueue_pid < 0)
+     {
++#endif
+         goto worker_errorout;
+     }
+     /*
