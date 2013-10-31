@@ -20,7 +20,7 @@ exit 1
 %define		kpkg	%(echo %{_build_kernels} | tr , '\\n' | while read n ; do echo %%undefine alt_kernel ; [ -z "$n" ] || echo %%define alt_kernel $n ; echo %%kernel_pkg ; done)
 %define		bkpkg	%(echo %{_build_kernels} | tr , '\\n' | while read n ; do echo %%undefine alt_kernel ; [ -z "$n" ] || echo %%define alt_kernel $n ; echo %%build_kernel_pkg ; done)
 
-%define		rel	64
+%define		rel	65
 %define		pname	linuxrdac
 Summary:	RDAC Multi-Path Proxy Driver for Linux
 Name:		%{pname}%{_alt_kernel}
@@ -68,7 +68,7 @@ RDAC Multi-Path Proxy Driver for Linux.\
 %{nil}
 
 %define build_kernel_pkg()\
-%{__make} clean\
+%{__make} -j1 KERNEL_OBJ=%{_kernelsrcdir} clean\
 %{__make} -j1 KERNEL_OBJ=%{_kernelsrcdir}\
 %install_kernel_modules -D installed -m mppVhba,mppUpper -d kernel/drivers/scsi\
 %{nil}
