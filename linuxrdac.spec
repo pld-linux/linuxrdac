@@ -1,6 +1,5 @@
 #
 # Conditional build:
-%bcond_without	dist_kernel	# allow non-distribution kernel
 %bcond_with	verbose		# verbose build (V=1)
 
 %if "%{_alt_kernel}" != "%{nil}"
@@ -35,7 +34,7 @@ Patch1:		linuxrdac-linux-3.4.patch
 Patch2:		linuxrdac-linux-3.7.patch
 #URL:		-
 BuildRequires:	rpmbuild(macros) >= 1.678
-%{?with_dist_kernel:%{expand:%kbrs}}
+%{expand:%kbrs}
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
 %description
@@ -47,10 +46,8 @@ Summary:	RDAC Multi-Path Proxy Driver for Linux\
 Release:	%{rel}@%{_kernel_ver_str}\
 Group:		Base/Kernel\
 Requires(post,postun):	/sbin/depmod\
-%if %{with dist_kernel}\
 %requires_releq_kernel\
 Requires(postun):	%releq_kernel\
-%endif\
 \
 %description -n kernel%{_alt_kernel}-scsi-mpprdac\
 RDAC Multi-Path Proxy Driver for Linux.\
