@@ -5,7 +5,7 @@
 # nothing to be placed to debuginfo package
 %define		_enable_debug_packages	0
 
-%define		rel	65
+%define		rel	66
 %define		pname	linuxrdac
 Summary:	RDAC Multi-Path Proxy Driver for Linux
 Name:		%{pname}%{_alt_kernel}
