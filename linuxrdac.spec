@@ -2,22 +2,8 @@
 # Conditional build:
 %bcond_with	verbose		# verbose build (V=1)
 
-%if "%{_alt_kernel}" != "%{nil}"
-%if 0%{?build_kernels:1}
-%{error:alt_kernel and build_kernels are mutually exclusive}
-exit 1
-%endif
-%global		_build_kernels		%{alt_kernel}
-%else
-%global		_build_kernels		%{?build_kernels:,%{?build_kernels}}
-%endif
-
 # nothing to be placed to debuginfo package
 %define		_enable_debug_packages	0
-
-%define		kbrs	%(echo %{_build_kernels} | tr , '\\n' | while read n ; do echo %%undefine alt_kernel ; [ -z "$n" ] || echo %%define alt_kernel $n ; echo "BuildRequires:kernel%%{_alt_kernel}-module-build >= 3:2.6.20.2" ; done)
-%define		kpkg	%(echo %{_build_kernels} | tr , '\\n' | while read n ; do echo %%undefine alt_kernel ; [ -z "$n" ] || echo %%define alt_kernel $n ; echo %%kernel_pkg ; done)
-%define		bkpkg	%(echo %{_build_kernels} | tr , '\\n' | while read n ; do echo %%undefine alt_kernel ; [ -z "$n" ] || echo %%define alt_kernel $n ; echo %%build_kernel_pkg ; done)
 
 %define		rel	65
 %define		pname	linuxrdac
@@ -33,8 +19,8 @@ Patch0:		linuxrdac-linux-2.6.39.patch
 Patch1:		linuxrdac-linux-3.4.patch
 Patch2:		linuxrdac-linux-3.7.patch
 #URL:		-
-BuildRequires:	rpmbuild(macros) >= 1.678
-%{expand:%kbrs}
+BuildRequires:	rpmbuild(macros) >= 1.701
+%{expand:%buildrequires_kernel kernel%%{_alt_kernel}-module-build >= 3:2.6.20.2}
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
 %description
@@ -70,7 +56,7 @@ RDAC Multi-Path Proxy Driver for Linux.\
 %install_kernel_modules -D installed -m mppVhba,mppUpper -d kernel/drivers/scsi\
 %{nil}
 
-%{expand:%kpkg}
+%{expand:%create_kernel_packages}
 
 %prep
 %setup -q -c
@@ -80,7 +66,7 @@ mv dkms_source_tree/* .
 %patch2 -p1
 
 %build
-%{expand:%bkpkg}
+%{expand:%build_kernel_packages}
 
 %install
 rm -rf $RPM_BUILD_ROOT
